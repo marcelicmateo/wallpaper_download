@@ -19,14 +19,15 @@ try:
 except:
     API_KEY = ""
 
-MAX_PICTURES = 500
-F_COLOR = Fore.YELLOW
-WALLPAPER_PATH = "Pictures/wallpapers"
+F_COLOR = Fore.YELLOW  # print text collor
+
+MAX_PICTURES = 500  # max picture to download
+WALLPAPER_PATH = "Pictures/wallpapers"  # path to download folder
 
 
 @dataclass(eq=False)
 class url_parameters:
-    apikey: str = API_KEY
+    apikey: str = API_KEY  # needed for getting NSFW pictures
     q: str = ""  # Search query - Your main way of finding what you're looking for
     categories: str = "111"  # 100/101/111* (general/anime/people)
     purity: str = "111"  # 100*/110/111(sfw/sketchy/nsfw)
