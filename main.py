@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import dataclass, field, asdict
 from typing import List
-import requests
+from requests import get
 import json
 import colorama
 from math import floor
@@ -24,6 +24,8 @@ F_COLOR = Fore.YELLOW  # print text collor
 MAX_PICTURES = 500  # max picture to download
 WALLPAPER_PATH = "Pictures/wallpapers"  # path to download folder
 
+MAX_PICTURES = (24, MAX_PICTURES)[MAX_PICTURES >= 24]
+
 
 @dataclass(eq=False)
 class url_parameters:
@@ -37,29 +39,49 @@ class url_parameters:
     order: str = "desc"  # desc*, asc
     topRange: str = "1M"  # 1d, 3d, 1w,1M*, 3M, 6M, 1y
     atleast: str = ""  # Minimum resolution allowed
-    resolutions: List[str] = field(
-        default_factory=lambda: ["1920x1080", "1920x1200"]
+    resolutions: str = ",".join(
+        (lambda: ["1920x1080", "1920x1200"])()
     )  # List of exact wallpaper resolutions ,Single resolution allowed
-    ratios: List[str] = field(default_factory=lambda: ["16x9", "16x10"])
-    colors: List[str] = field(default_factory=list)
-    page: str = ""  # 24 pic per page
+    ratios: str = ",".join((lambda: ["16x9", "16x10"])())
+    colors: str = ",".join((lambda: [])())
+    page: str = "1"  # 24 pic per page
     seed: str = ""  # Optional seed for random results
 
-    def compose_get_url(self):
-        WALHAVEN_API_URL = "https://wallhaven.cc/api/v1/search?"
-        parameters = []
-        for key, value in asdict(self).items():
-            if isinstance(value, List):
-                value = ",".join(value)
-            if value != "":
-                parameters.append("{}={}".format(key, value))
-        parameters = "&".join(parameters)
-        get_url = "".join([WALHAVEN_API_URL, parameters])
-        return get_url
+    def __parse_get_request(self, url, params=None) -> str:
+        # WALHAVEN_API_URL = "https://wallhaven.cc/api/v1/search"
+        try:
+            response = get(url, params=params, timeout=10)
+        except (ConnectionError, ReadTimeout) as a:
+            pass
+        return response
+
+    def __compose_picure_download_list(self, pages, seed):
+        WALHAVEN_API_URL = "https://wallhaven.cc/api/v1/search"
+
+        r = self.__parse_get_request(
+            WALHAVEN_API_URL, self.__dict__
+        ).json()  # get 1st page, plus metadata of query
+        current_page, pages, per_page, total, query, seed = r.get("meta").values()
+        if total == 0:
+            return "0 search result for query:{}".format(query)
+        elif pages == 1:  # only one page of pics to download
+            return r.get("data")  # return list
+        elif total > MAX_PICTURES:
+            # limitig max pictures to download
+            pages = int(floor(MAX_PICTURES / 24.0))
+
+        pic_list = r.get("data")
+        d = self.__dict__
+        param_list = []
+        for i in range(2, pages + 1):
+            d["page"] = i
+            param_list.append(d)
+            self.__summon_worker_bees()
+        return 0
 
 
 def save_pic(url, id):
-    r = requests.get(url)
+    r = get(url)
     with open(id, "wb+") as f:
         f.write(r.content)
 
@@ -93,20 +115,13 @@ def download_page_data(url):
     )
 
 
-def generate_url_page_list(n_pages: int):
-    q = []
-    for i in range(n_pages):
-        q.append(url_parameters(page=str(i + 1)).compose_get_url())
-    return q
-
-
 import pathlib
 
 
 def download_picture(name, url, path):
     sleep(float(randint(5, 9) / 10))
     try:
-        data = requests.get(url, timeout=10)
+        data = get(url, timeout=10)
     except (ReadTimeout, ConnectionError) as e:
         return (
             "Error:{}{}".format(F_COLOR, e),
@@ -129,7 +144,7 @@ def download_picture(name, url, path):
 
 
 def main():
-    request = url_parameters().compose_get_url()
+    request = url_parameters()
     colorama.init(autoreset=True)
     print("Sending GET url:\n{color}{url}".format(color=F_COLOR, url=request))
     data = requests.get(request).json().get("meta")
